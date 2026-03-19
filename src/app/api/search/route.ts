@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
             id: item.Id,
             source: sourceValue,
             source_name: sourceName,
+            weight: weightMap.get(sourceValue) ?? 0,
             title: item.Name,
             poster: client.getImageUrl(item.Id, 'Primary', undefined, client.isProxyEnabled() ? proxyToken || undefined : undefined),
             episodes: [],
@@ -138,6 +139,7 @@ export async function GET(request: NextRequest) {
                   id: folderName,
                   source: 'openlist',
                   source_name: '私人影库',
+                  weight: weightMap.get('openlist') ?? 0,
                   title: info.title,
                   poster: getTMDBImageUrl(info.poster_path),
                   episodes: [],
@@ -195,6 +197,11 @@ export async function GET(request: NextRequest) {
 
     let flattenedResults = [...openlistResults, ...embyResults, ...apiResultsFlat];
 
+    flattenedResults = flattenedResults.map((result) => ({
+      ...result,
+      weight: result.weight ?? (weightMap.get(result.source) ?? 0),
+    }));
+
     if (!config.SiteConfig.DisableYellowFilter) {
       flattenedResults = flattenedResults.filter((result) => {
         const typeName = result.type_name || '';
@@ -204,8 +211,8 @@ export async function GET(request: NextRequest) {
 
     // 按权重降序排序
     flattenedResults.sort((a, b) => {
-      const weightA = weightMap.get(a.source) ?? 0;
-      const weightB = weightMap.get(b.source) ?? 0;
+      const weightA = a.weight ?? 0;
+      const weightB = b.weight ?? 0;
       return weightB - weightA;
     });
 

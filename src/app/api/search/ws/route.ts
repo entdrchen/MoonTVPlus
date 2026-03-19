@@ -147,6 +147,7 @@ export async function GET(request: NextRequest) {
                   id: item.Id,
                   source: sourceValue,
                   source_name: sourceName,
+                  weight: weightMap.get(sourceValue) ?? 0,
                   title: item.Name,
                   poster: client.getImageUrl(item.Id, 'Primary', undefined, client.isProxyEnabled() ? proxyToken || undefined : undefined),
                   episodes: [],
@@ -253,6 +254,7 @@ export async function GET(request: NextRequest) {
                     id: key,
                     source: 'openlist',
                     source_name: '私人影库',
+                    weight: weightMap.get('openlist') ?? 0,
                     title: info.title,
                     poster: getTMDBImageUrl(info.poster_path),
                     episodes: [],
@@ -334,6 +336,11 @@ export async function GET(request: NextRequest) {
               return !yellowWords.some((word: string) => typeName.includes(word));
             });
           }
+
+          filteredResults = filteredResults.map((result) => ({
+            ...result,
+            weight: result.weight ?? (weightMap.get(result.source) ?? 0),
+          }));
 
           // 发送该源的搜索结果
           completedSources++;

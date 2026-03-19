@@ -1504,22 +1504,6 @@ function PlayPageClient() {
   ): Promise<SearchResult> => {
     if (sources.length === 1) return sources[0];
 
-    // 获取配置以获取权重信息
-    let weightMap = new Map<string, number>();
-    try {
-      const configResponse = await fetch('/api/admin/config');
-      if (configResponse.ok) {
-        const configData = await configResponse.json();
-        if (configData.Config?.SourceConfig) {
-          configData.Config.SourceConfig.forEach((source: any) => {
-            weightMap.set(source.key, source.weight ?? 0);
-          });
-        }
-      }
-    } catch (error) {
-      console.warn('获取配置失败，权重将使用默认值0:', error);
-    }
-
     // 将播放源均分为两批，并发测速各批，避免一次性过多请求
     const batchSize = Math.ceil(sources.length / 2);
     const allResults: Array<{
@@ -1602,8 +1586,8 @@ function PlayPageClient() {
     if (successfulResults.length === 0) {
       console.warn('所有播放源测速都失败，按权重排序');
       const sortedByWeight = [...sources].sort((a, b) => {
-        const weightA = weightMap.get(a.source) ?? 0;
-        const weightB = weightMap.get(b.source) ?? 0;
+        const weightA = a.weight ?? 0;
+        const weightB = b.weight ?? 0;
         return weightB - weightA;
       });
       return sortedByWeight[0];
@@ -1642,7 +1626,7 @@ function PlayPageClient() {
         maxSpeed,
         minPing,
         maxPing,
-        weightMap.get(result.source.source) ?? 0
+        result.source.weight ?? 0
       ),
     }));
 
