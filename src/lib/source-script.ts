@@ -8,6 +8,10 @@ import { db } from '@/lib/db';
 const SOURCE_SCRIPT_REGISTRY_KEY = 'source-script:registry';
 const DEFAULT_TIMEOUT_MS = 20000;
 
+// 绕过 webpack 静态分析，获取真正的 Node.js require
+// eslint-disable-next-line no-eval
+const _nodeRequire = eval('require') as NodeRequire;
+
 // ---- 内存缓存 ----
 let _registryCache: { data: SourceScriptRegistry; ts: number } | null = null;
 const REGISTRY_CACHE_TTL_MS = 5_000;
@@ -188,24 +192,6 @@ function assertScriptKey(key: string) {
   }
 }
 
-function assertSafeCode(code: string) {
-  const blockedPatterns = [
-    /\brequire\s*\(/,
-    /\bprocess\./,
-    /\bchild_process\b/,
-    /\bfs\b/,
-    /\bimport\s*\(/,
-    /\beval\s*\(/,
-    /\bnew\s+Function\b/,
-  ];
-
-  for (const pattern of blockedPatterns) {
-    if (pattern.test(code)) {
-      throw new Error(`脚本包含不允许的用法: ${pattern}`);
-    }
-  }
-}
-
 function createLogCollector() {
   const logs: string[] = [];
 
@@ -313,17 +299,10 @@ function createUtils() {
 }
 
 function createScriptFactory(code: string) {
-  assertSafeCode(code);
-
   return new Function(
-    `"use strict";
-const process = undefined;
-const require = undefined;
-const module = undefined;
-const exports = undefined;
-const fetch = undefined;
-${code}`
-  ) as () => any;
+    'require',
+    `"use strict";\n${code}`
+  ) as (req: NodeRequire) => any;
 }
 
 async function createScriptContext(script: SourceScriptRecord, configValues?: Record<string, string>) {
@@ -462,7 +441,7 @@ function getOrCompileScript(script: SourceScriptRecord) {
   if (cached) return cached;
 
   const factory = createScriptFactory(script.code);
-  const compiled = normalizeScript(factory());
+  const compiled = normalizeScript(factory(_nodeRequire));
 
   if (_compiledCache.size >= MAX_COMPILED_CACHE_SIZE) {
     const firstKey = _compiledCache.keys().next().value;
@@ -550,7 +529,6 @@ export async function saveSourceScript(input: {
   enabled?: boolean;
 }) {
   assertScriptKey(input.key);
-  assertSafeCode(input.code);
 
   const registry = await loadRegistry();
   const now = Date.now();
@@ -602,7 +580,6 @@ export async function importSourceScripts(items: SourceScriptImportItem[]) {
     }
 
     assertScriptKey(item.key);
-    assertSafeCode(item.code);
 
     const existing = registry.items.find((record) => record.key === item.key);
 
@@ -682,7 +659,7 @@ export async function testSourceScript(input: {
     };
 
     const factory = createScriptFactory(input.code);
-    const compiled = normalizeScript(factory());
+    const compiled = normalizeScript(factory(_nodeRequire));
     const hook = compiled[input.hook];
     if (typeof hook !== 'function') {
       throw new Error(`脚本未实现 ${input.hook} hook`);
